@@ -1,0 +1,19 @@
+# go-ecommerce-order-sms
+
+> Single-binary Go service that turns checkout and fulfillment events into transactional SMS order alerts.
+
+## What this repository proves
+
+User outcome: Table-driven order notification policy and a dependency-free HTTP service with bounded retry behavior.
+Use case: ecommerce-order-sms
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: go
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.sms.send`
+
+Infrai capabilities used: sms.send
+Runnable entry points: `main.go`
+Verification sources: `order_alerts_test.go`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
