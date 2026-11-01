@@ -1,27 +1,33 @@
 # Send order updates by SMS from Go
 
-Bring the service up, then POST the event your checkout or fulfillment worker already emits. Infrai fronts the delivery call behind one API and a single`INFRAI_API_KEY`; this repo sticks to plain REST, so the binary has zero SDK deps.
+Stand up the service, then POST the event your checkout or fulfillment worker already emits. Infrai keeps the delivery call behind one API and a single`INFRAI_API_KEY`; this repo uses plain REST, so the binary has no SDK dependency. If you have been paged for missed jobs, remember the worker owns the event, not the cron.
 
+```
 ```bash
 export INFRAI_API_KEY='your-key'
 go run .
 ```
+```
 
-From another shell:
+In another shell, run the client:
 
+```
 ```bash
 ./scripts/demo.sh
 ```
+```
 
-The sample submits order`A-42`in state`fulfilled`with tracking code`ZX9`. On accept, the response carries`sent`,`message_id`, and`state`:
+The demo submits order`A-42`in the`fulfilled`state with tracking code`ZX9`. A successful request returns an accepted response containing`sent`,`message_id`, and`state`:
 
+```
 ```json
 {"message_id":"msg_123","sent":true,"state":"fulfilled"}
+```
 ```
 
 ## The event boundary
 
-`POST /orders/update`takes`order_id`,`customer_name`,`phone`,`state`,`total_cents`, and`tracking_code`. Only four customer-visible states trigger a message:
+`POST /orders/update`accepts`order_id`,`customer_name`,`phone`,`state`,`total_cents`, and`tracking_code`. After a postmortem on duplicate SMS, we narrowed customer-visible states to four that should produce messages:
 
 | State | Decision |
 | --- | --- |
@@ -30,29 +36,33 @@ The sample submits order`A-42`in state`fulfilled`with tracking code`ZX9`. On acc
 | `receipt_ready` | Report the paid total |
 | `delivered` | Confirm delivery |
 
-Any other state returns`sent: false`; those are internal fulfillment transitions only. We skip updates with no phone number. A fulfilled update needs a tracking code, or validation fails.
+Other states return`sent: false`; they stay internal fulfillment transitions we do not alert on. An update without a phone number is skipped. A fulfilled update must carry a tracking code, or validation fails.
 
-The real prod pain is duplicate event delivery. Workers redeliver when they miss an ack.`BuildOrderAlert`derives`order:<order_id>:<state>`and sends it as`idempotency_key`, so a repeated transition keeps the same write identity. The client retries 429s, respects`Retry-After`, and falls back to bounded exponential backoff.
+The operational gotcha that has paged us: duplicate event delivery. Queue workers commonly redeliver after losing an acknowledgement.`BuildOrderAlert`derives`order:<order_id>:<state>`and sends it as`idempotency_key`, so the same transition keeps the same write identity. The client retries HTTP 429 responses, honors`Retry-After`, and otherwise uses bounded exponential backoff. Idempotency is a requirement, not a nice-to-have.
 
 ## Verify the decision and request
 
-Run the table-driven and HTTP-boundary tests to validate behavior:
+Run the focused table and HTTP-boundary tests before deploy:
 
+```
 ```bash
 go test ./...
 ```
+```
 
-The table feeds checkout, fulfillment, receipt, delivery, an internal picking state, a missing phone, and missing tracking data. Assertions: exact customer message for the four public states, no send for internal or unreachable updates, and validation error on incomplete fulfillment. The request test verifies`POST /v1/sms/send`, Bearer auth, the stable idempotency key, a single rate-limit retry, and pulls`message_id`from the response envelope.
+The table input includes checkout, fulfillment, receipt, delivery, an internal picking state, a missing phone, and missing tracking data. Expected results are the exact customer message for the four public states, no send for internal or unreachable updates, and validation for incomplete fulfillment. The request test checks`POST /v1/sms/send`, Bearer authentication, the stable idempotency key, one rate-limit retry, and extraction of`message_id`from the response envelope.
 
 ## Binary shape
 
-The binary is stdlib-only Go.`order_alerts.go`holds the business decision,`infrai_sms.go`owns the remote call,`main.go`serves the tiny HTTP surface. Build it with:
+The executable uses only the Go standard library.`order_alerts.go`owns the business decision,`infrai_sms.go`owns the remote boundary, and`main.go`exposes the small HTTP surface. Build it with:
 
+```
 ```bash
 go build -o order-smsd .
 ```
+```
 
-It listens on`:8080`by default; override with`ADDR`.
+The service listens on`:8080`by default; set`ADDR`to change it.
 
 ## License
 
@@ -60,7 +70,7 @@ MIT
 
 ## Setting up for real use: Go Ecommerce Order SMS
 
-That covers the minimal path. Before you point this at prod: the notes below are specific to Go Ecommerce Order SMS.
+That was the minimal version. Before running this in production, follow the runbook below for Go Ecommerce Order SMS.
 
 **Account & key**
 
